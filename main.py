@@ -8,6 +8,8 @@ Created on Mon Mar 15 14:20:38 2021
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OrdinalEncoder
+from tensorflow.keras import Input, Model
+from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
@@ -20,21 +22,18 @@ def load_path_data(dataset_path):
     return path_filenames
 
 def obtain_feature_data(path_filenames, train=True):
-    # 8 dimension: building, path, time, uuid, major, minor, rssi, floor
-    
+    # 8 dimension: building, path, time, uuid, major, minor, rssi, floor   
     dimension = (11 if train==True else 10)
     feature_data = np.empty((0,dimension)) 
     waypoint_data = np.empty((0,6))
     for file_txt in path_filenames:
         path = int(Path(file_txt).name[:-4],16)
         floor = Path(file_txt).parent.name
-        # building = int(Path(file_txt).parent.parent.name,16)
         with open(file_txt, 'r', encoding='utf-8') as file:
             lines = file.readlines()
         for line_data in lines:
             line_data = line_data.strip()
-            # if not line_data or line_data[0] == '#':
-            #     continue
+
             line_data = line_data.split('\t')
             if line_data[1][:6] == 'SiteID':
                 building = int(line_data[1][7:],16)
@@ -74,26 +73,6 @@ def pair_waypoint_data(feature_data, waypoint_data):
         new_feature_data = np.vstack((new_feature_data,feature_row))
     return new_feature_data
 
-# def encode_data():
-#     scalerX = OrdinalEncoder()
-#     scalerX.fit(x)
-#     scaled_x = scalerX.transform(x)
-#     scaled_x[:,2] = x[:,2]
-    
-#     scalerY = OrdinalEncoder()
-#     y_floor = y[:,0].reshape(-1,1)
-#     scalerY.fit(y_floor)
-#     scaled_y = scalerY.transform(y_floor)
-#     scaled_y = np.hstack((scaled_y,y[:,-2:].astype(float)))
-#     scaled_y[:,2] = y[:,2]
-    
-#     return scalerX, scalerY, scaled_x, scaled_y
-
-# def encode_transform(scaler, data):
-#     scaled_data = scaler.transform(data)
-#     scaled_data[:,2] = data[:,2]
-#     return scaled_data
-
 def encode_floor(y):
     scaler = OrdinalEncoder()
     y_floor = y[:,0].reshape(-1,1)
@@ -109,22 +88,31 @@ def split_x_y(feature_data):
     x = feature_data[:,:-3].astype(float)
     y_loc = feature_data[:,-2:].astype(float)
     scaler, y_floor = encode_floor(feature_data[:,-3:])
-    # y_floor = y_floor.squeeze()
     y = np.hstack((y_floor,y_loc))
     print(x.shape, y.shape)
     return scaler,x,y
 
-def build_model():
-    model = Sequential()
-    model.add(Dense(12, input_dim=10, activation='relu'))
-    model.add(Dense(8, activation='relu'))
-    model.add(Dense(3, activation='linear'))
-    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
-    model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
-    return model
+# def build_model():
+#     model = Sequential()
+#     model.add(Dense(12, input_dim=10, activation='relu'))
+#     model.add(Dense(8, activation='relu'))
+#     model.add(Dense(3, activation='sigmoid'))
+#     opt = tf.keras.optimizers.RMSprop(learning_rate=0.001)
+#     model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
+#     return model
 
-# def test_model():
-    
+def build_model():
+    inputs = Input(shape=(10,))
+    dense1 = Dense(12, activation='relu')(inputs)
+    dense2 = Dense(8, activation='relu')(dense1)
+    output_floor = Dense(1, activation='softmax')(dense2)
+    output_loc = Dense(2, activation='relu')(dense2)
+    model = Model(inputs=inputs, outputs=(output_floor,output_loc))
+    opt = tf.keras.optimizers.RMSprop(learning_rate=0.001)
+    model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
+    model.summary()
+    # plot_model(model)
+    return model
     
 
 if __name__ == '__main__':
@@ -135,20 +123,18 @@ if __name__ == '__main__':
     feature_train = obtain_feature_data(path_train_filenames)
     scaler,x,y = split_x_y(feature_train)
     
-    # scalerX, scalerY, x, y = encode_data()
     x_train, y_train, x_val, y_val, x_test, y_test = split_train_val_test(x, y)
     
     model = build_model()
-    model.fit(x_train,y_train, validation_data=(x_val,y_val), epochs=10, batch_size=128)
+    model.fit(x_train,(y_train[:,0],y_train[:,1:]), validation_data=(x_val,(y_val[:,0],y_val[:,1:])), epochs=10, batch_size=128)
     print('evaluate')
-    model.evaluate(x_test, y_test)
+    model.evaluate(x_test, (y_test[:,0],y_test[:,1:]))
     # model.save('model/'+time.strftime("%Y%m%d-%H%M%S")+'.h5')
     
     data_test_path = base_path+'dataset/sample_test/'
     path_test_filenames = load_path_data(data_test_path)
     x_pred = obtain_feature_data(path_test_filenames,train=False).astype(float)
-    # feature_test_scaled = scalerX.transform(feature_test)
-    # feature_test_scaled[:,2] = feature_test[:,2]
-    y_pred = model.predict(x_pred)
+
+    y_pred_floor, y_pred_loc = model.predict(x_pred)
     
     
