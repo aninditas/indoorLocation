@@ -20,7 +20,7 @@ def obtain_feature_data():
     # 8 dimension: building, path, time, uuid, major, minor, rssi, floor
     feature_data = np.empty((0,8)) 
     waypoint_data = np.empty((0,6))
-    for file_txt in path_filenames[0:2]:
+    for file_txt in path_filenames:
         path = float(int(Path(file_txt).name[:-4],16))
         floor = float(int(Path(file_txt).parent.name,16))
         building = float(int(Path(file_txt).parent.parent.name,16))
@@ -45,7 +45,7 @@ def obtain_feature_data():
                 feature_data = np.vstack((feature_data,(building, path, time, uuid, major, minor, rssi, floor)))
     # add 2 dimension: x_loc and y_loc from the nearest time
     feature_data = pair_waypoint_data(feature_data, waypoint_data)
-    feature_data = normalize_data(feature_data)
+    # feature_data = normalize_data(feature_data)
     return feature_data
 
 def pair_waypoint_data(feature_data, waypoint_data):
@@ -62,7 +62,9 @@ def pair_waypoint_data(feature_data, waypoint_data):
     return new_feature_data
 
 def normalize_data(feature_data):
-    feature_data
+    for col in range(feature_data.shape[1]):
+        feature_data[:,col]=feature_data[:,col]/np.max(feature_data[:,col])
+    return feature_data
 
 def split_train_val_test(x, y, val_size = 0.1, test_size=0.1):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
