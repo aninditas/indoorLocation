@@ -3,4 +3,5 @@ __pycache__/
 dataset/
 ilc_20/
 output/
+model/
 *.csv
