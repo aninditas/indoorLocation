@@ -111,7 +111,7 @@ def build_model():
     opt = tf.keras.optimizers.RMSprop(learning_rate=0.001)
     model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
     model.summary()
-    # plot_model(model)
+    plot_model(model)
     return model
     
 
