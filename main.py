@@ -69,8 +69,8 @@ def split_x_y():
     return x,y
 
 if __name__ == '__main__':
-    base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/dataset/'
-    dataset_path = base_path+'train/'
+    base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/'
+    dataset_path = base_path+'dataset/train/'
     path_filenames=load_path_data()
     feature_data = obtain_feature_data()
     x,y = split_x_y()
