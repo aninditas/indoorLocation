@@ -45,6 +45,7 @@ def obtain_feature_data():
                 feature_data = np.vstack((feature_data,(building, path, time, uuid, major, minor, rssi, floor)))
     # add 2 dimension: x_loc and y_loc from the nearest time
     feature_data = pair_waypoint_data(feature_data, waypoint_data)
+    feature_data = normalize_data(feature_data)
     return feature_data
 
 def pair_waypoint_data(feature_data, waypoint_data):
@@ -59,6 +60,9 @@ def pair_waypoint_data(feature_data, waypoint_data):
         feature_row=np.append(feature_row,masked_waypoint[shortest_distance,3:5])
         new_feature_data = np.vstack((new_feature_data,feature_row))
     return new_feature_data
+
+def normalize_data(feature_data):
+    feature_data
 
 def split_train_val_test(x, y, val_size = 0.1, test_size=0.1):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
