@@ -71,13 +71,13 @@ def split_x_y():
     print(x.shape, y.shape)
     return x,y
 
-def build_model():
-    model = Sequential()
-    model.add(Dense(12, input_dim=7, activation='relu'))
-    model.add(Dense(8, activation='relu'))
-    model.add(Dense(3, activation='sigmoid'))
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-    return model
+# def build_model():
+#     model = Sequential()
+#     model.add(Dense(12, input_dim=7, activation='relu'))
+#     model.add(Dense(8, activation='relu'))
+#     model.add(Dense(3, activation='sigmoid'))
+#     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+#     return model
 
 if __name__ == '__main__':
     base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/'
@@ -87,6 +87,6 @@ if __name__ == '__main__':
     x,y = split_x_y()
     x_train, y_train, x_val, y_val, x_test, y_test = split_train_val_test(x, y)
     
-    model = build_model()
-    model.fit(x_train,y_train, validation_data=(x_val,y_val), epochs=100, batch_size=128)
+    # model = build_model()
+    # model.fit(x_train,y_train, validation_data=(x_val,y_val), epochs=100, batch_size=128)
     
