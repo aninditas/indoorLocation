@@ -1,0 +1,6 @@
+.spyproject/
+__pycache__/
+dataset/
+ilc_20/
+output/
+*.csv
