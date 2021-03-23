@@ -13,10 +13,11 @@ from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
-# from numpy import genfromtxt
 from pandas import read_csv
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+import pandas as pd
 import time
 
 def load_path_data(dataset_path,extension):
@@ -104,47 +105,77 @@ def pair_waypoint_data(feature_data, waypoint_data):
     return new_feature_data
 
 def encode_floor(y):
-    scaler = OrdinalEncoder()
-    y_floor = y[:,0].reshape(-1,1)
-    scaler.fit(y_floor)
-    return scaler, scaler.transform(y_floor)
+    max_floor = 11
+    new_y = []
+    for yy in y:
+        if 'F' in yy:
+            try:
+                new_y.append(int(yy.replace('F',''))-1)
+            except:
+                new_y.append(0)
+        elif 'L' in yy:
+            try:
+                new_y.append(int(yy.replace('L',''))-1)
+            except:
+                new_y.append(0)        
+        elif 'B' in yy:
+            try:
+                new_y.append(int(yy.replace('B',''))*-1)
+            except:
+                new_y.append(0)
+        elif 'P' in yy:
+            try:
+                new_y.append(int(yy.replace('P',''))*-1)
+            except:
+                new_y.append(0)
+        else: new_y.append(0)
+    return new_y
+
+# def encode_floor(y):
+#     scaler = OrdinalEncoder()
+#     y_floor = y[:,0].reshape(-1,1)
+#     scaler.fit(y_floor)
+#     return scaler, scaler.transform(y_floor)
 
 def split_train_val_test(x, y, val_size = 0.1, test_size=0.1):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
     x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.1)
     return x_train, y_train, x_val, y_val, x_test, y_test 
 
-def split_x_y(feature_data):
-    x = feature_data[:,:-3].astype(float)
-    y_loc = feature_data[:,-2:].astype(float)
-    scaler, y_floor = encode_floor(feature_data[:,-3:])
+def split_x_y(paired_data):
+    x = paired_data[:,:-3].astype(float)
+    y_loc = paired_data[:,-2:].astype(float)
+    y_floor = encode_floor(paired_data[:,-3])
+    y_floor = np.reshape(y_floor,((-1,1)))
     y = np.hstack((y_floor,y_loc))
     print(x.shape, y.shape)
-    return scaler,x,y
+    return x,y
 
-# def build_model():
-#     model = Sequential()
-#     model.add(Dense(12, input_dim=10, activation='relu'))
-#     model.add(Dense(8, activation='relu'))
-#     model.add(Dense(3, activation='sigmoid')) 
-#     opt = tf.keras.optimizers.RMSprop(learning_rate=0.001)
-#     model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
-#     return model
-
-def build_model():
-    inputs = Input(shape=(10,))
-    dense1 = Dense(12, activation='relu')(inputs)
-    dense2 = Dense(8, activation='relu')(dense1)
-    output_floor = Dense(floor_number, activation='softmax')(dense2)
-    output_loc = Dense(2, activation='linear')(dense2)
-    model = Model(inputs=inputs, outputs=(output_floor,output_loc))
-    opt = tf.keras.optimizers.RMSprop(learning_rate=0.001)
-    model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
+def build_model(floor_model):
+    model = Sequential()
+    model.add(Dense(128, input_dim=10, activation='relu'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(floor_number, activation='softmax')) 
+    opt = tf.keras.optimizers.SGD(learning_rate=0.001)
+    model.compile(loss='sparse_categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
     model.summary()
-    # plot_model(model)
     return model
 
-def preprocessing():
+# def build_model():
+#     inputs = Input(shape=(10,))
+#     dense1 = Dense(12, activation='relu')(inputs)
+#     dense2 = Dense(8, activation='relu')(dense1)
+#     output_floor = Dense(floor_number, activation='softmax')(dense2)
+#     output_loc = Dense(2, activation='linear')(dense2)
+#     model = Model(inputs=inputs, outputs=(output_floor,output_loc))
+#     opt = tf.keras.optimizers.RMSprop(learning_rate=0.001)
+#     model.compile(loss='mean_squared_error', optimizer=opt, metrics=['accuracy'])
+#     model.summary()
+#     # plot_model(model)
+#     return model
+
+def preprocessing_1():
     # obtain TYPE_BEACON data from text, save to csv file each path
     data_train_path = base_path+'dataset/train/'
     path_train_filenames = load_path_data(data_train_path,'.txt')
@@ -164,8 +195,23 @@ def preprocessing():
     # pair the feature_data with waypoint_data
     paired_data = pair_waypoint_data(feature_data, waypoint_data)
     np.savetxt(base_path+"dataset/train_npy/paired_data_npy.csv", paired_data, delimiter=",", fmt='%s')
+
+def preprocessing_2():
+    paired_data = read_csv(base_path+"dataset_npy/train_paired_data_npy.csv")
+    paired_data = paired_data.to_numpy()
+    max_values, paired_data = encode_data(paired_data)
+    x,y = split_x_y(paired_data)
+    return paired_data, max_values, x, y
     
-    
+def encode_data(paired_data):
+    np.seterr(divide='ignore', invalid='ignore')
+    max_values = [] 
+    for idx in range(paired_data.shape[1]-3):
+        paired_data[:,idx] = paired_data[:,idx].astype(float)
+        max_values.append(paired_data[:,idx].max())
+        paired_data[:,idx] = np.true_divide(paired_data[:,idx],max_values[idx])
+    return max_values, paired_data
+
 def convert_hex_to_int(feature_data, waypoint_data):
     idx = [0,1,3,4,5,9]
     for idxx in idx:
@@ -178,17 +224,42 @@ def convert_hex_to_int(feature_data, waypoint_data):
 if __name__ == '__main__':
     base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/'
     
+    # # preprocessing_1 is for generating npy files
+    # # once the npy files is generated, it does not have to be executed again
+    # preprocessing_1()
     
-    # scaler,x,y = split_x_y(feature_train)
-    # floor_number = np.max(y[:,0])+1
+    # preprocessing_2 is for loading the npy file
+    # followed by encoding the data, and splitting it into x, y, train, val, and test
+    paired_data, max_values, x, y = preprocessing_2()
     
-    # x_train, y_train, x_val, y_val, x_test, y_test = split_train_val_test(x, y)
+    floor_number = np.max(y[:,0])+1
     
-    # model = build_model()
+    x_train, y_train, x_val, y_val, x_test, y_test = split_train_val_test(x, y)
+    
+    model = build_model(floor_number)
+    history = model.fit(x_train,y_train[:,0], validation_data=(x_val,y_val[:,0]), epochs=10, batch_size=256)
     # model.fit(x_train,(y_train[:,0],y_train[:,1:]), validation_data=(x_val,(y_val[:,0],y_val[:,1:])), epochs=10, batch_size=128)
-    # print('evaluate')
-    # model.evaluate(x_test, (y_test[:,0],y_test[:,1:]))
-    # model.save('model/'+time.strftime("%Y%m%d-%H%M%S")+'.h5')
+    
+    # summarize history for accuracy
+    plt.plot(history.history['accuracy'])
+    plt.plot(history.history['val_accuracy'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+    # summarize history for loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+    
+    print('evaluate')
+    model.evaluate(x_test, (y_test[:,0],y_test[:,1:]))
+    model.save('model/'+time.strftime("%Y%m%d-%H%M%S")+'.h5')
     
     # data_test_path = base_path+'dataset/test/'
     # path_test_filenames = load_path_data(data_test_path)
