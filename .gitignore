@@ -1,8 +1,10 @@
 .spyproject/
 __pycache__/
 *.csv
-dataset/
-model/
+dataset/*
+!dataset/train_npy/
+dataset/train_npy/*
 !dataset/train_npy/train_recap_npy/
+model/
 ilc_20/
 output/
