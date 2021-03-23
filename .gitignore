@@ -1,7 +1,14 @@
 .spyproject/
 __pycache__/
+sample_submission.csv
 dataset/
+dataset_npy/
+model/
 ilc_20/
+<<<<<<< HEAD
 output/
 model/
 *.csv
+=======
+output/
+>>>>>>> fbc5cca3094b7ea6cc94ee5b026acccf8361eb1b
