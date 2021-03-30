@@ -17,6 +17,7 @@ from tensorflow.keras.layers.experimental.preprocessing import TextVectorization
 import matplotlib.pyplot as plt
 # from numpy import genfromtxt
 from pandas import read_csv
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 import time
@@ -74,7 +75,7 @@ def build_model():
     output_floor = Dense(floor_number, activation='softmax', name='denseFloor')(dense6)
     output_loc = Dense(2, activation='linear', name='denseLoc')(dense3)
     
-    model = Model(inputs=inputs, outputs=(output_floor,output_loc))
+    model = Model(inputs=inputs, outputs=[output_floor,output_loc])
     opt = tf.keras.optimizers.Adam(learning_rate=0.01)
     model.compile(loss=['sparse_categorical_crossentropy','mean_squared_error'], optimizer=opt, metrics=['accuracy'])
     model.summary()
@@ -113,37 +114,54 @@ def select_best_feature(feature_data, train=True):
     # feature_clear = feature_max_signal[feature_max_signal[:,7]>-999]
     return feature_max_signal
 
+def collect_bssdi():
+    bssdi_location = np.arange(5,305,3)
+    bssdi = []
+    for b in bssdi_location:
+        bssdi.append(feature_data[:,b])
+    bssdi = np.unique(bssdi)
+    return bssdi
+
 def split_x_y(feature_data):
     x = feature_data[:,[0,2,5,6,7]]
     y = feature_data[:,[1,3,4]]
     return x,y
 
-def encode_x(x, scalers=None, train=True):
-    idx = [0,1,2]
-    if train==True:
-        scalers = []
-        for idxx in idx:
-            scalers.append(OrdinalEncoder())
-            temp = x[:,idxx].reshape(-1,1)
-            temp = temp.astype(str)
-            scalers[idxx].fit(temp)
-            temp = scalers[idxx].transform(temp)
-            x[:,idxx] = temp.squeeze()
-    else:
-        for idxx in idx:
-            temp = x[:,idxx].reshape(-1,1)
-            temp = temp.astype(str)
-            temp = scalers[idxx].transform(temp)
-            x[:,idxx] = temp.squeeze()
-    return scalers, x.astype(float)
+def encode_feature(feature, scaler=None):
+    if scaler==None:
+        scaler = OrdinalEncoder()
+    feature = feature.reshape(-1,1)
+    scaler.fit(feature)
+    feature = scaler.transform(feature)
+    feature = feature.squeeze()
+    return scaler, feature.astype(float)
 
-def decode_x(scalers):
-    idx = [0,1,2]
-    for idxx in idx:
-        temp = x[:,idxx].reshape(-1,1)
-        temp = scalers[idxx].inverse_transform(temp)
-        x[:,idxx] = temp.squeeze()
-    return x
+# def encode_x(x, scalers=None, train=True):
+#     idx = [0,1,2]
+#     if train==True:
+#         scalers = []
+#         for idxx in idx:
+#             scalers.append(OrdinalEncoder())
+#             temp = x[:,idxx].reshape(-1,1)
+#             temp = temp.astype(str)
+#             scalers[idxx].fit(temp)
+#             temp = scalers[idxx].transform(temp)
+#             x[:,idxx] = temp.squeeze()
+#     else:
+#         for idxx in idx:
+#             temp = x[:,idxx].reshape(-1,1)
+#             temp = temp.astype(str)
+#             temp = scalers[idxx].transform(temp)
+#             x[:,idxx] = temp.squeeze()
+#     return scalers, x.astype(float)
+
+# def decode_x(scalers):
+#     idx = [0,1,2]
+#     for idxx in idx:
+#         temp = x[:,idxx].reshape(-1,1)
+#         temp = scalers[idxx].inverse_transform(temp)
+#         x[:,idxx] = temp.squeeze()
+#     return x
     
 # def encode_x():
 #     max_values=[]
@@ -234,7 +252,7 @@ def train_loc_only():
     return model
 
 def train_combined():
-    Y = y.astype(int)
+    Y = y.astype(float)
     
     x_train, x_test, y_train, y_test = train_test_split(x, Y, test_size=0.1)
     
@@ -267,6 +285,9 @@ def train_combined():
     plt.show()
     
     return model
+
+
+    
     
 
 if __name__ == '__main__':
@@ -274,14 +295,18 @@ if __name__ == '__main__':
     
     #=============================================================train==============================================
     
-    # # create data, save to csv
-    # dataset_path = base_path+'dataset/train_kouki/'
-    # path_filenames = load_path_data(dataset_path,'.csv')
-    # feature_data = obtain_feature_data(path_filenames)
+    # create data, save to csv
+    dataset_path = base_path+'dataset/train_kouki/'
+    path_filenames = load_path_data(dataset_path,'.csv')
+    feature_data = obtain_feature_data(path_filenames)
     
-    # feature_data = feature_data[:,1:306]
-    # feature_data = select_best_feature(feature_data)
-    # np.savetxt(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex.csv", feature_data, delimiter=",", fmt='%s')
+    feature_data = feature_data[:,1:306]
+    
+    wifi_bssdi = collect_bssdi()
+    scaler_bssdi, bssdi = encode_feature(wifi_bssdi)
+    
+    feature_data = select_best_feature(feature_data)
+    np.savetxt(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex.csv", feature_data, delimiter=",", fmt='%s')
     
     # load data from csv
     df = read_csv(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex.csv",header=None,)
@@ -289,16 +314,21 @@ if __name__ == '__main__':
     
     x,y = split_x_y(feature_data)
     y[:,0] = y[:,0]+2
+    
    
-    scalers, x = encode_x(x)
+    scaler_building, x[:,0] = encode_feature(x[:,0])
+    scaler_path, x[:,1] = encode_feature(x[:,1])
+    scaler_bssdi, x[:,2] = encode_feature(x[:,2], scaler_bssdi)
+    
     max_values, x = normalize_x(x)
+    x = x.astype(float)
     
     feature_number = x.shape[1]
     floor_number = int(np.max(y[:,0])+1)
     
     # # model = train_floor_only()
     # # model = train_loc_only()
-    # model = train_combined()
+    model = train_combined()
     
     # model.save('model/'+time.strftime("%Y%m%d-%H%M%S")+'.h5')
     # model.save('model/combined.h5')
@@ -322,24 +352,32 @@ if __name__ == '__main__':
     x_test,y_test = split_x_y(feature_data_test)
     y_test[:,0] = y_test[:,0]+2
     
-    scalers, x_test = encode_x(x_test, scalers=scalers,train=False)
+    scaler_building, x_test[:,0] = encode_feature(x_test[:,0],scaler_building)
+    scaler_path, x_test[:,1] = encode_feature(x_test[:,1],scaler_path)
+    scaler_bssdi, x_test[:,2] = encode_feature(x_test[:,2],scaler_bssdi)
+    
     max_values, x_test = normalize_x(x_test, max_values, train=False)
     
     feature_number = x.shape[1]
     floor_number = int(np.max(y[:,0])+1)
     
-    model = load_model('model/20210330-024104.h5')
-    y_pred = model.predict(x)
+    # model = load_model('model/20210330-024104.h5')
+    y_pred = model.predict(x_test)
     y_pred_floor = np.argmax(y_pred[0], axis=1)-2
     y_pred_loc = y_pred[1]
     
-    time=[]
+    first_col=[]
     for tm in feature_data_test_ori[:,[2,4,1]]:
         temp = f'{tm[2]:013d}'
-        time.append(str(tm[0])+'_'+str(tm[1]+'_'+temp))
+        first_col.append(str(tm[0])+'_'+str(tm[1]+'_'+temp))
     
-    y_export = np.hstack((time,y_pred_floor))
+    first_col = np.array(first_col).reshape(-1,1)
+    y_pred_floor = y_pred_floor.reshape(-1,1)
+    y_export = np.hstack((first_col,y_pred_floor))
     y_export = np.hstack((y_export,y_pred_loc))
+    y_export = pd.DataFrame({'site_path_timestamp': y_export[:, 0], 'floor': y_export[:, 1], 'x': y_export[:, 2], 'y': y_export[:, 3]})
+    y_export.to_csv(base_path+'output/submission_'+time.strftime("%Y%m%d-%H%M%S")+'.csv', index=False)
+    # np.savetxt(base_path+'output/submission_'+time.strftime("%Y%m%d-%H%M%S")+'.csv', y_export, delimiter=",", fmt='%s')
     
     # issues: cannot decode wifi bssdi --> possibly because they aren't selected
     # solution: encode all bssdi even if not selected
