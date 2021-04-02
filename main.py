@@ -10,35 +10,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OrdinalEncoder
 from tensorflow.keras import Input, Model
 from tensorflow.keras.utils import plot_model
-from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import Dense, Concatenate, BatchNormalization
-from tensorflow.keras.layers.experimental.preprocessing import Normalization
 from tensorflow.keras.callbacks import ModelCheckpoint
-import matplotlib.pyplot as plt
 from pandas import read_csv
 import pandas as pd
 import numpy as np
 import tensorflow as tf
 import time
 
-def load_path_data(dataset_path,extension):
-    path_filenames = list(Path(dataset_path).glob("**/*"+extension))
-    return path_filenames
-
-def obtain_feature_data(path_filenames, train=True):
-    col = 945 if train==True else 942
-    feature_data = np.empty((0,col)) 
-    for file_csv in path_filenames:
-        df = read_csv(file_csv)
-        temp = df.to_numpy()
-        temp = temp[:,1:]
-        feature_data = np.vstack((feature_data, temp))
+def obtain_feature_data(file_csv, train=True):
+    df = read_csv(file_csv)
+    feature_data = df.to_numpy()
+    feature_data = feature_data[:,1:]
     return feature_data    
-
-def split_train_val_test(x, y, val_size = 0.1, test_size=0.1):
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
-    x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.1)
-    return x_train, y_train, x_val, y_val, x_test, y_test 
 
 def build_model():
     inputs = Input(shape=(feature_number,), name='inputs')
@@ -54,44 +38,26 @@ def build_model():
     dense8 = Dense(64, activation='relu', name='dense8')(dense7)
     dense9 = Dense(64, activation='relu', name='dense9')(dense8)
     
-    # output_floor = Dense(floor_number, activation='softmax', name='denseFloor')(dense6)
-    # output_loc = Dense(2, activation='linear', name='denseLoc')(dense3)
-    
     output_floor = Dense(floor_number, activation='softmax', name='denseFloor')(dense3)
-    output_loc_X = Dense(2, activation='linear', name='denseLoc_X')(dense6)
-    output_loc_Y = Dense(2, activation='linear', name='denseLoc_Y')(dense9)
+    output_loc_X = Dense(1, activation='linear', name='denseLoc_X')(dense6)
+    output_loc_Y = Dense(1, activation='linear', name='denseLoc_Y')(dense9)
     
+
     model = Model(inputs=inputs, outputs=[output_floor,output_loc_X,output_loc_Y])
     opt = tf.keras.optimizers.Adam(learning_rate=0.01)
-    model.compile(loss='mean_squared_error', optimizer=opt, metrics=tf.keras.metrics.RootMeanSquaredError())
-    model.summary()
+    model.compile(loss=['sparse_categorical_crossentropy','mean_squared_error','mean_squared_error'], optimizer=opt, metrics=tf.keras.metrics.RootMeanSquaredError())
+    # model.summary()
     plot_model(model)
     return model
 
-def select_best_feature(feature_data, train=True):
-    signal_location = np.arange(6,306,3)
-    signal = feature_data[:,signal_location]
-    max_signal = np.argmax(signal, axis=1)
-    feature_max_signal = np.empty((0,3))
-    for idx,row in enumerate(feature_data):
-        feature_max_signal = np.vstack((feature_max_signal,row[signal_location[max_signal[idx]]-1:signal_location[max_signal[idx]]+2]))
-    feature_max_signal = np.hstack((feature_data[:,0:5],feature_max_signal))
-    # feature_clear = feature_max_signal[feature_max_signal[:,7]>-999]
-    return feature_max_signal
-
-def collect_bssdi():
-    bssdi_location = np.arange(5,305,3)
-    bssdi = []
-    for b in bssdi_location:
-        bssdi.append(feature_data[:,b])
-    bssdi = np.unique(bssdi)
-    return bssdi
-
-def split_x_y(feature_data):
+def split_x_y(feature_data, train=True):
     x = feature_data[:,-1]
     x = x.reshape(-1,1)
-    x = np.hstack((x,feature_data[:,:-4]))
-    y = feature_data[:,[-2,-4,-3]]
+    if train==True:
+        x = np.hstack((x,feature_data[:,:-4]))
+        y = feature_data[:,[-2,-4,-3]]
+    else:
+        x = np.hstack((x,feature_data[:,:-1]))
     return x,y
 
 def encode_feature(feature, scaler=None):
@@ -114,13 +80,10 @@ def normalize_x(x, max_values=None, train=True):
             x[:,col] = x[:,col]/max_values[col]
     return max_values, np.absolute(x)    
 
-def train_combined():
-    Y = y.astype(float)
-    
-    x_train, x_test, y_train, y_test = train_test_split(x, Y, test_size=0.1)
+def train(x,y):
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1)
     
     model = build_model()
-    model.summary()
     
     checkpoint_cb = ModelCheckpoint("/Model/cp_model.h5", save_best_only=True)
     history = model.fit(x_train, [y_train[:,0],y_train[:,1],y_train[:,2]], validation_split=0.1, epochs=100, batch_size=32, callbacks=[checkpoint_cb])
@@ -128,57 +91,12 @@ def train_combined():
     print('evaluate')
     model.evaluate(x_test,  [y_test[:,0],y_test[:,1],y_test[:,2]])
     
-    # summarize history for rmse
-    plt.plot(history.history['denseFloor_root_mean_squared_error'])
-    plt.plot(history.history['val_denseFloor_root_mean_squared_error'])
-    plt.title('floor rmse')
-    plt.ylabel('rmse')
-    plt.xlabel('epoch')
-    plt.legend(['train floor', 'val floor'], loc='upper left')
-    plt.show()
-    
-    plt.plot(history.history['denseLoc_root_mean_squared_error'])
-    plt.plot(history.history['val_denseLoc_root_mean_squared_error'])
-    plt.title('loc rmse')
-    plt.ylabel('rmse')
-    plt.xlabel('epoch')
-    plt.legend(['train loc','val loc'], loc='upper left')
-    plt.show()
-    
-    # # summarize history for accuracy
-    # plt.plot(history.history['denseFloor_accuracy'])
-    # plt.plot(history.history['denseLoc_accuracy'])
-    # plt.plot(history.history['val_denseFloor_accuracy'])
-    # plt.plot(history.history['val_denseLoc_accuracy'])
-    # plt.title('model accuracy')
-    # plt.ylabel('accuracy')
-    # plt.xlabel('epoch')
-    # plt.legend(['train floor', 'train loc', 'val floor', 'val loc'], loc='upper left')
-    # plt.show()
-    
-    # summarize history for loss
-    plt.plot(history.history['denseFloor_loss'])
-    plt.plot(history.history['val_denseFloor_loss'])
-    plt.title('floor loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train floor', 'val floor'], loc='upper left')
-    plt.show()
-    
-    plt.plot(history.history['denseLoc_loss'])
-    plt.plot(history.history['val_denseLoc_loss'])
-    plt.title('loc loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train loc', 'val loc'], loc='upper left')
-    plt.show()
-    
-    return model
+    return model, history
 
 def export_submission(y_pred_floor, y_pred_loc):
     
     first_col=[]
-    for tm in feature_data_test_ori[:,[2,4,1]]:
+    for tm in feature_data_test[:,[2,4,1]]:
         temp = f'{tm[2]:013d}'
         first_col.append(str(tm[0])+'_'+str(tm[1]+'_'+temp))
     
@@ -193,90 +111,77 @@ def export_submission(y_pred_floor, y_pred_loc):
 if __name__ == '__main__':
     base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/'
     
-    #=============================================================train==============================================
-    
-    # create data, save to csv
     dataset_path = base_path+'dataset/train_devin/'
-    path_filenames = load_path_data(dataset_path,'.csv')
-    feature_data = obtain_feature_data(path_filenames)
+    path_filenames = list(Path(dataset_path).glob("**/*"+'.csv'))
     
-    # feature_data = feature_data[:,1:306]
+    dataset_path_test = base_path+'dataset/test_devin/'
+    path_filenames_test = list(Path(dataset_path_test).glob("**/*"+'.csv'))
     
-    # wifi_bssdi = collect_bssdi()
-    # scaler_bssdi, bssdi = encode_feature(wifi_bssdi)
-    
-    # feature_data = select_best_feature(feature_data)
-    # np.savetxt(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex.csv", feature_data, delimiter=",", fmt='%s')
-    
-    # load data from csv
-    # df = read_csv(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex.csv",header=None,)
-    # feature_data = df.to_numpy()
-    
-    x,y = split_x_y(feature_data)
-    y[:,0] = y[:,0]+2
-   
-    # scaler_building, x[:,0] = encode_feature(x[:,0])
-    scaler_path, x[:,0] = encode_feature(x[:,0])
-    # scaler_bssdi, x[:,2] = encode_feature(x[:,2], scaler_bssdi)
-    # scaler_bssdi, x[:,2] = encode_feature(x[:,2])
-    
-    max_values, x = normalize_x(x)
-    x = x.astype(float)
-    
-    # norm = Normalization(mean=0.5, variance=1.)
-    # norm.adapt(x)
-    # norm(x)
-    
-    feature_number = x.shape[1]
-    floor_number = int(np.max(y[:,0])+1)
-    
-    # model = train_floor_only()
-    # model = train_loc_only()
-    model = train_combined()
-    
-    # model.save('model/'+time.strftime("%Y%m%d-%H%M%S")+'.h5')
-    model.save('model/combined.h5')
+    rmse=np.empty((0,3))
+    models=[]
+    building_path=[]
+    y_pred_floor=[]
+    y_pred_loc_x=[]
+    y_pred_loc_y=[]
     
     
-    # #=============================================================test==============================================
+    for file_csv_train,file_csv_test in zip(path_filenames,path_filenames_test):
+        
+        # training process
+        print(file_csv_train)
+        feature_data_train = obtain_feature_data(file_csv_train)
+        x,y = split_x_y(feature_data_train)
+        y[:,0] = y[:,0]+2
+        scaler_path, x[:,0] = encode_feature(x[:,0])
+        max_values, x = normalize_x(x)
+        
+        x = x.astype(float)
+        y = y.astype(float)
+        
+        feature_number = x.shape[1]
+        floor_number = int(np.max(y[:,0])+1)
+        model_, history = train(x,y)
+        models = np.append(models,model_)
+        rmse_floor = history.history['val_denseFloor_root_mean_squared_error'][-1]
+        rmse_x = history.history['val_denseLoc_X_root_mean_squared_error'][-1]
+        rmse_y = history.history['val_denseLoc_Y_root_mean_squared_error'][-1]
+        rmse = np.vstack((rmse,(rmse_floor,rmse_x,rmse_y)))
+        
+        # testing process
+        feature_data_test = obtain_feature_data(file_csv_test, train=False)
+        x_test_ = feature_data_test[:,-1]
+        x_test=[]
+        for xt in x_test_:
+            x_test.append(xt[25:49])
+        x_test = np.array(x_test).reshape(-1,1)
+        x_test = np.hstack((x_test,feature_data_test[:,:-1]))
+        
+        scaler_path, x_test[:,0] = encode_feature(x_test[:,0],scaler_path)
+        x_test = x_test.astype(float)
+        max_values, x_test = normalize_x(x_test, max_values, train=False)
+        
+        feature_number = x.shape[1]
+        floor_number = int(np.max(y[:,0])+1)
+        
+        y_pred = model_.predict(x_test)
+        temp = np.argmax(y_pred[0], axis=1)-2
+        temp = temp.squeeze()
+        building_path = np.append(building_path,x_test_)
+        y_pred_floor = np.append(y_pred_floor,temp)
+        y_pred_loc_x = np.append(y_pred_loc_x,y_pred[1])
+        y_pred_loc_y = np.append(y_pred_loc_y,y_pred[2])
     
-    # # create data, save to csv
-    # dataset_path = base_path+'dataset/test_kouki/'
-    # path_filenames = load_path_data(dataset_path,'.csv')
-    # feature_data_test_ori = obtain_feature_data(path_filenames, train=False)
+    building_path = np.array(building_path).reshape(-1,1)
+    y_pred_floor = np.array(y_pred_floor).reshape(-1,1)
+    y_pred_loc_x = np.array(y_pred_loc_x).reshape(-1,1)
+    y_pred_loc_y = np.array(y_pred_loc_y).reshape(-1,1)
     
-    # feature_data_test = feature_data_test_ori[:,2:307]
-    # feature_data_test = select_best_feature(feature_data_test)
-    # np.savetxt(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex_test.csv", feature_data_test, delimiter=",", fmt='%s')
+    y_export = np.hstack((building_path,y_pred_floor,y_pred_loc_x,y_pred_loc_y))
     
-    # # load data from csv
-    # df_test = read_csv(base_path+"dataset/train_npy/train_path_npy_wifi/feature_data_hex_test.csv", header=None)
-    # feature_data_test = df_test.to_numpy()
+    y_export = pd.DataFrame({'site_path_timestamp': y_export[:, 0], 'floor': y_export[:, 1], 'x': y_export[:, 2], 'y': y_export[:, 3]})
+    y_export.to_csv(base_path+'output/submission_'+time.strftime("%Y%m%d-%H%M%S")+'.csv', index=False)
     
-    # x_test,y_test = split_x_y(feature_data_test)
-    # y_test[:,0] = y_test[:,0]+2
-    
-    # scaler_building, x_test[:,0] = encode_feature(x_test[:,0],scaler_building)
-    # scaler_path, x_test[:,1] = encode_feature(x_test[:,1],scaler_path)
-    # scaler_bssdi, x_test[:,2] = encode_feature(x_test[:,2],scaler_bssdi)
-    
-    # x_test = x_test.astype(float)
-    # # norm(x_test)
-    # max_values, x_test = normalize_x(x_test, max_values, train=False)
-    
-    # feature_number = x.shape[1]
-    # floor_number = int(np.max(y[:,0])+1)
-    
-    # model = load_model('model/combined.h5')
-    
-    # y_pred = model.predict(x_test)
-    # y_pred_floor = np.argmax(y_pred[0], axis=1)-2
-    # y_pred_loc = y_pred[1]
-    
-    # export_submission(y_pred_floor, y_pred_loc)
-    
-    
-    
+    print(np.average(rmse,axis=0))
     
     
     
