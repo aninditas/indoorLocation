@@ -11,7 +11,8 @@ from sklearn.preprocessing import OrdinalEncoder
 from tensorflow.keras import Input, Model
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.models import load_model
-from tensorflow.keras.layers import Dense, Concatenate
+from tensorflow.keras.layers import Dense, Concatenate, BatchNormalization
+from tensorflow.keras.layers.experimental.preprocessing import Normalization
 import matplotlib.pyplot as plt
 from pandas import read_csv
 import pandas as pd
@@ -49,10 +50,14 @@ def build_model():
     
     output_floor = Dense(floor_number, activation='softmax', name='denseFloor')(dense6)
     output_loc = Dense(2, activation='linear', name='denseLoc')(dense3)
+
+    
+    output_floor = Dense(floor_number, activation='softmax', name='denseFloor')(dense6)
+    output_loc = Dense(2, activation='linear', name='denseLoc')(dense3)
     
     model = Model(inputs=inputs, outputs=[output_floor,output_loc])
     opt = tf.keras.optimizers.Adam(learning_rate=0.01)
-    model.compile(loss=['sparse_categorical_crossentropy','mean_squared_error'], optimizer=opt, metrics=['accuracy'])
+    model.compile(loss=['sparse_categorical_crossentropy','mean_squared_error'], optimizer=opt, metrics='accuracy')
     model.summary()
     plot_model(model)
     return model
@@ -113,33 +118,33 @@ def train_combined():
     print('evaluate')
     model.evaluate(x_test,  [y_test[:,0],y_test[:,1:]])
     
-    # summarize history for rmse
-    plt.plot(history.history['denseFloor_root_mean_squared_error'])
-    plt.plot(history.history['val_denseFloor_root_mean_squared_error'])
-    plt.title('floor rmse')
-    plt.ylabel('rmse')
-    plt.xlabel('epoch')
-    plt.legend(['train floor', 'val floor'], loc='upper left')
-    plt.show()
-    
-    plt.plot(history.history['denseLoc_root_mean_squared_error'])
-    plt.plot(history.history['val_denseLoc_root_mean_squared_error'])
-    plt.title('loc rmse')
-    plt.ylabel('rmse')
-    plt.xlabel('epoch')
-    plt.legend(['train loc','val loc'], loc='upper left')
-    plt.show()
-    
-    # # summarize history for accuracy
-    # plt.plot(history.history['denseFloor_accuracy'])
-    # plt.plot(history.history['denseLoc_accuracy'])
-    # plt.plot(history.history['val_denseFloor_accuracy'])
-    # plt.plot(history.history['val_denseLoc_accuracy'])
-    # plt.title('model accuracy')
-    # plt.ylabel('accuracy')
+    # # summarize history for rmse
+    # plt.plot(history.history['denseFloor_root_mean_squared_error'])
+    # plt.plot(history.history['val_denseFloor_root_mean_squared_error'])
+    # plt.title('floor rmse')
+    # plt.ylabel('rmse')
     # plt.xlabel('epoch')
-    # plt.legend(['train floor', 'train loc', 'val floor', 'val loc'], loc='upper left')
+    # plt.legend(['train floor', 'val floor'], loc='upper left')
     # plt.show()
+    
+    # plt.plot(history.history['denseLoc_root_mean_squared_error'])
+    # plt.plot(history.history['val_denseLoc_root_mean_squared_error'])
+    # plt.title('loc rmse')
+    # plt.ylabel('rmse')
+    # plt.xlabel('epoch')
+    # plt.legend(['train loc','val loc'], loc='upper left')
+    # plt.show()
+    
+    # summarize history for accuracy
+    plt.plot(history.history['denseFloor_accuracy'])
+    plt.plot(history.history['denseLoc_accuracy'])
+    plt.plot(history.history['val_denseFloor_accuracy'])
+    plt.plot(history.history['val_denseLoc_accuracy'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train floor', 'train loc', 'val floor', 'val loc'], loc='upper left')
+    plt.show()
     
     # summarize history for loss
     plt.plot(history.history['denseFloor_loss'])
@@ -199,7 +204,6 @@ if __name__ == '__main__':
     
     x,y = split_x_y(feature_data)
     y[:,0] = y[:,0]+2
-    
    
     scaler_building, x[:,0] = encode_feature(x[:,0])
     scaler_path, x[:,1] = encode_feature(x[:,1])
@@ -208,6 +212,10 @@ if __name__ == '__main__':
     
     max_values, x = normalize_x(x)
     x = x.astype(float)
+    
+    # norm = Normalization(mean=0.5, variance=1.)
+    # norm.adapt(x)
+    # norm(x)
     
     feature_number = x.shape[1]
     floor_number = int(np.max(y[:,0])+1)
@@ -242,6 +250,8 @@ if __name__ == '__main__':
     scaler_path, x_test[:,1] = encode_feature(x_test[:,1],scaler_path)
     scaler_bssdi, x_test[:,2] = encode_feature(x_test[:,2],scaler_bssdi)
     
+    x_test = x_test.astype(float)
+    # norm(x_test)
     max_values, x_test = normalize_x(x_test, max_values, train=False)
     
     feature_number = x.shape[1]
@@ -249,7 +259,6 @@ if __name__ == '__main__':
     
     model = load_model('model/combined.h5')
     
-    x_test = x_test.astype(float)
     y_pred = model.predict(x_test)
     y_pred_floor = np.argmax(y_pred[0], axis=1)-2
     y_pred_loc = y_pred[1]
