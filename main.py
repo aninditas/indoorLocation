@@ -92,21 +92,6 @@ def train(x,y):
     model.evaluate(x_test,  [y_test[:,0],y_test[:,1],y_test[:,2]])
     
     return model, history
-
-def export_submission(y_pred_floor, y_pred_loc):
-    
-    first_col=[]
-    for tm in feature_data_test[:,[2,4,1]]:
-        temp = f'{tm[2]:013d}'
-        first_col.append(str(tm[0])+'_'+str(tm[1]+'_'+temp))
-    
-    first_col = np.array(first_col).reshape(-1,1)
-    y_pred_floor = y_pred_floor.reshape(-1,1)
-    y_export = np.hstack((first_col,y_pred_floor))
-    y_export = np.hstack((y_export,y_pred_loc))
-    y_export = pd.DataFrame({'site_path_timestamp': y_export[:, 0], 'floor': y_export[:, 1], 'x': y_export[:, 2], 'y': y_export[:, 3]})
-    y_export.to_csv(base_path+'output/submission_'+time.strftime("%Y%m%d-%H%M%S")+'.csv', index=False)
-    
  
 if __name__ == '__main__':
     base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/'
