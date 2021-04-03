@@ -46,7 +46,7 @@ def build_model():
     model = Model(inputs=inputs, outputs=[output_floor,output_loc_X,output_loc_Y])
     opt = tf.keras.optimizers.Adam(learning_rate=0.01)
     model.compile(loss=['sparse_categorical_crossentropy','mean_squared_error','mean_squared_error'], optimizer=opt, metrics=tf.keras.metrics.RootMeanSquaredError())
-    # model.summary()
+    model.summary()
     plot_model(model)
     return model
 
@@ -85,8 +85,8 @@ def train(x,y):
     
     model = build_model()
     
-    checkpoint_cb = ModelCheckpoint("/Model/cp_model.h5", save_best_only=True)
-    history = model.fit(x_train, [y_train[:,0],y_train[:,1],y_train[:,2]], validation_split=0.1, epochs=100, batch_size=32, callbacks=[checkpoint_cb])
+    checkpoint_cb = ModelCheckpoint("/model/cp_model.h5", save_best_only=True)
+    history = model.fit(x_train, [y_train[:,0],y_train[:,1],y_train[:,2]], validation_split=0.1, epochs=100, batch_size=32)
     
     print('evaluate')
     model.evaluate(x_test,  [y_test[:,0],y_test[:,1],y_test[:,2]])
@@ -94,14 +94,15 @@ def train(x,y):
     return model, history
  
 if __name__ == '__main__':
-    base_path = 'D:/Dropbox/PhD/python/IndoorLocation/IndoorLocation/'
+    base_path = '/home/kuro/Downloads/archive/wifi_features'
     
-    dataset_path = base_path+'dataset/train_devin/'
+    dataset_path = base_path+'/train/'
     path_filenames = list(Path(dataset_path).glob("**/*"+'.csv'))
-    
-    dataset_path_test = base_path+'dataset/test_devin/'
+    path_filenames =sorted(path_filenames)
+    dataset_path_test = base_path+'/test/'
     path_filenames_test = list(Path(dataset_path_test).glob("**/*"+'.csv'))
-    
+    path_filenames_test =sorted(path_filenames_test)
+
     rmse=np.empty((0,3))
     models=[]
     building_path=[]
@@ -114,9 +115,12 @@ if __name__ == '__main__':
         
         # training process
         print(file_csv_train)
+        print(file_csv_test)
+
         feature_data_train = obtain_feature_data(file_csv_train)
         x,y = split_x_y(feature_data_train)
         y[:,0] = y[:,0]+2
+        print(x[:,0])
         scaler_path, x[:,0] = encode_feature(x[:,0])
         max_values, x = normalize_x(x)
         
@@ -164,7 +168,7 @@ if __name__ == '__main__':
     y_export = np.hstack((building_path,y_pred_floor,y_pred_loc_x,y_pred_loc_y))
     
     y_export = pd.DataFrame({'site_path_timestamp': y_export[:, 0], 'floor': y_export[:, 1], 'x': y_export[:, 2], 'y': y_export[:, 3]})
-    y_export.to_csv(base_path+'output/submission_'+time.strftime("%Y%m%d-%H%M%S")+'.csv', index=False)
+    y_export.to_csv(base_path+'/output/submission_'+time.strftime("%Y%m%d-%H%M%S")+'.csv', index=False)
     
     print(np.average(rmse,axis=0))
     
